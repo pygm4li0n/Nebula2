@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#03010a">
+<title>NEBULA — Diamond Hands Galaxy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Space+Grotesk:wght@400;600&display=swap">
+<style>
+:root{--ink:#f2eeff;--dim:#8d84ad;--line:rgba(255,255,255,.15);--acc:#9bc7ff}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#03010a;color:var(--ink);font-family:'Space Grotesk',system-ui,sans-serif;overflow:hidden}
+button,input{font:inherit;color:inherit}
+canvas{position:fixed;inset:0;width:100%;height:100%;cursor:grab;touch-action:none}
+canvas.d{cursor:grabbing}
+canvas.h{cursor:pointer}
+.ui{position:fixed;z-index:5}
+#ttl{left:22px;top:calc(20px + env(safe-area-inset-top,0px));pointer-events:none}
+#ttl h1{font:800 clamp(24px,4vw,40px)/1 Unbounded,sans-serif;letter-spacing:.06em;
+  background:linear-gradient(92deg,#ffd98a,#ff4fae 45%,#7a4bff);-webkit-background-clip:text;background-clip:text;color:transparent}
+#ttl .tag{color:var(--ink);opacity:.85;font-size:13px;letter-spacing:.28em;text-transform:uppercase;margin-top:8px}
+#ttl p#st{color:var(--dim);font-size:14px;margin-top:8px}
+#top{right:22px;top:calc(20px + env(safe-area-inset-top,0px));display:flex;gap:10px;align-items:center}
+.pill{padding:10px 18px;border:1px solid var(--line);border-radius:99px;background:rgba(10,6,22,.65);backdrop-filter:blur(10px);cursor:pointer;white-space:nowrap}
+.pill:hover{border-color:#fff9}
+#cn{background:linear-gradient(90deg,#ff2e93,#7a4bff);border:0;font-weight:600}
+#dm{font-size:11px;color:var(--dim)}
+#lg{left:22px;bottom:calc(20px + env(safe-area-inset-bottom,0px));color:var(--dim);font-size:13px;max-width:340px;line-height:1.5;pointer-events:none}
+#zm{right:22px;bottom:calc(20px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px}
+#zm button{width:42px;height:42px;padding:0;font-size:20px}
+#me{right:82px;bottom:calc(20px + env(safe-area-inset-bottom,0px));width:min(300px,calc(100vw - 110px));padding:16px;border:1px solid var(--line);border-radius:16px;background:rgba(10,6,22,.8);backdrop-filter:blur(14px)}
+#me b{font:800 16px Unbounded,sans-serif;display:block}
+#me span{display:block;color:var(--dim);font-size:14px;margin:6px 0 10px}
+#nb{display:flex;gap:8px}
+#nb input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.07);outline:0}
+#nb button{padding:9px 14px;border:0;border-radius:10px;background:#fff;color:#150a28;font-weight:600;cursor:pointer}
+#tip{position:fixed;z-index:8;pointer-events:none;padding:10px 13px;border:1px solid var(--line);border-radius:12px;background:rgba(10,6,22,.9);font-size:13px;line-height:1.5;display:none;white-space:nowrap}
+#tip b{font-size:15px}#tip i{color:var(--dim);font-style:normal}
+#tip .hint{color:var(--acc);font-style:normal;margin-top:4px;display:block;font-size:11px;opacity:.8}
+
+#sel{left:22px;bottom:calc(20px + env(safe-area-inset-bottom,0px));
+  width:min(340px,calc(100vw - 44px));padding:18px;position:fixed;z-index:6;
+  border:1px solid rgba(155,199,255,.4);border-radius:16px;
+  background:rgba(10,6,22,.92);backdrop-filter:blur(16px);
+  box-shadow:0 0 0 1px rgba(155,199,255,.1),0 18px 48px rgba(0,0,0,.6)}
+#sel b#sel-name{font:800 16px Unbounded,sans-serif;display:block;padding-right:28px;line-height:1.25}
+#sel .wal{display:block;color:var(--acc);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:11px;margin:6px 0 12px;word-break:break-all;line-height:1.4}
+#sel .stat{display:block;color:var(--dim);font-size:13px;line-height:1.6}
+#sel .stat b{display:inline;font:600 13px 'Space Grotesk';color:var(--ink)}
+#sel-x{position:absolute;top:12px;right:12px;width:26px;height:26px;padding:0;border:0;border-radius:8px;
+  background:rgba(255,255,255,.08);color:var(--ink);font-size:16px;line-height:1;cursor:pointer;display:grid;place-items:center}
+#sel-x:hover{background:rgba(255,255,255,.2)}
+#sel-scan{width:100%;margin-top:14px;padding:11px 14px;border:0;border-radius:10px;
+  background:linear-gradient(90deg,#9bc7ff,#c9dcff);color:#0a1230;font-weight:700;
+  font-size:13px;letter-spacing:.02em;cursor:pointer}
+#sel-scan:hover{filter:brightness(1.08)}
+#sel-scan:active{transform:translateY(1px)}
+[hidden]{display:none!important}
+@media(max-width:640px){#lg{display:none}#me{left:22px;right:auto;bottom:90px;width:calc(100vw - 44px)}
+  #sel{left:22px;right:22px;width:auto}}
+</style></head><body>
+<canvas id="c"></canvas>
+<div class="ui" id="ttl"><h1>NEBULA</h1><div class="tag">Diamond Hands Galaxy</div><p id="st"></p></div>
+<div class="ui" id="top">
+  <button class="pill" id="sy" hidden>Sync now</button>
+  <button class="pill" id="fd" hidden>Find my star</button>
+  <button class="pill" id="cn">Connect Phantom</button>
+</div>
+<div class="ui" id="lg">Every holder is a star. Closer to the center means held longer. Bigger means a bigger bag. Drag to explore, scroll to zoom, click a star to inspect it.</div>
+<div class="ui" id="zm"><button class="pill" id="zi">+</button><button class="pill" id="zo">−</button></div>
+<div class="ui" id="me" hidden><b id="m1"></b><span id="m2"></span><div id="nb"><input id="nm" maxlength="20" placeholder="Display name"><button id="sv">Save</button></div></div>
+<div id="tip"></div>
+
+<div id="sel" hidden>
+  <button id="sel-x" aria-label="Close">×</button>
+  <b id="sel-name">Holder</b>
+  <span class="wal" id="sel-wallet"></span>
+  <span class="stat">Held <b id="sel-held">—</b></span>
+  <span class="stat">Rank <b id="sel-rank">—</b></span>
+  <span class="stat">Balance <b id="sel-amt">—</b></span>
+  <button id="sel-scan">View on Solscan ↗</button>
+</div>
+
+<script>
+const CONFIG={
+  SUPABASE_URL:'https://alacrboutohcxlbaucti.supabase.co',
+  SUPABASE_ANON_KEY:'sb_publishable_1dkjqvUt03MhL4bqNtEnqw_zcIk8uyB',
+  HELIUS_URL:'https://mainnet.helius-rpc.com/?api-key=fa7e6515-19de-45de-a7d1-35a64a0d9a1a',
+  TOKEN_MINT:'9cRCn9rGT8V2imeM2BaKs13yhMEais3ruM3rPvTGpump',
+  EXCLUDE:[],
+  DEV_WALLET:'GKpgaSMUeUPD2AjXb9eiXsbQ1qm6YfGrYY6hHvNgqNJc',
+  EXPLORER:'https://solscan.io/account/',
+  TICKER:'$ANSEM',
+  BUY_URL:'#',
+  REFRESH_MS:300000
+};
+const $=id=>document.getElementById(id),cv=$('c'),g=cv.getContext('2d'),R=(a,b)=>a+Math.random()*(b-a),
+      LIVE=!!(CONFIG.SUPABASE_URL&&CONFIG.SUPABASE_ANON_KEY),
+      HELIUS=!!(CONFIG.HELIUS_URL&&CONFIG.TOKEN_MINT);
+
+// --- Supabase headers — works for legacy eyJ... AND new sb_publishable_... keys
+function SB(extra){
+  const k=CONFIG.SUPABASE_ANON_KEY;
+  const h={apikey:k,'Content-Type':'application/json'};
+  // Legacy JWT keys go in Authorization too; new publishable keys only need apikey
+  if(k.startsWith('eyJ')) h['Authorization']='Bearer '+k;
+  return extra ? Object.assign(h,extra) : h;
+}
+
+let W,H,T=0,S=[],rows=[],me=null,mine=null,hov=null,selected=null,focus=0,
+    mouse={x:-9,y:-9},cam={x:0,y:0,z:1};
+const MAXR=520;
+const EXCLUDE_SET=new Set(CONFIG.EXCLUDE.map(s=>s.toLowerCase()));
+function rs(){const d=devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=W*d;cv.height=H*d;g.setTransform(d,0,0,d,0,0)}
+addEventListener('resize',rs);rs();cam.z=Math.min(W,H)/980;
+const short=w=>w.slice(0,4)+'…'+w.slice(-4),cmp=new Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:2});
+const dur=ms=>{const d=ms/864e5|0,h=ms/36e5%24|0;return d?d+'d '+h+'h':h?h+'h '+(ms/6e4%60|0)+'m':(ms/6e4|0)+'m'};
+
+async function fetchHoldersFromHelius(){
+  const map=new Map();let page=1;const limit=1000;
+  while(true){
+    const r=await fetch(CONFIG.HELIUS_URL,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({jsonrpc:'2.0',id:'nebula',method:'getTokenAccounts',
+        params:{mint:CONFIG.TOKEN_MINT,page,limit,options:{showZeroBalance:false}}})
+    });
+    if(!r.ok)throw new Error('helius '+r.status);
+    const j=await r.json();
+    const accounts=j?.result?.token_accounts??[];
+    if(!accounts.length)break;
+    for(const a of accounts){
+      const owner=a.owner;if(!owner)continue;
+      if(EXCLUDE_SET.has(owner.toLowerCase()))continue;
+      const amt=Number(a.amount)/Math.pow(10,a.decimals??0);
+      map.set(owner,(map.get(owner)??0)+amt);
+    }
+    if(accounts.length<limit)break;
+    page++;
+  }
+  return [...map.entries()].map(([wallet,amount])=>({wallet,amount}));
+}
+
+async function pushToSupabase(holders){
+  if(!holders.length)return;
+  const now=new Date().toISOString();
+  const payload=holders.map(h=>({wallet:h.wallet,amount:h.amount,last_seen:now}));
+  for(let i=0;i<payload.length;i+=500){
+    const chunk=payload.slice(i,i+500);
+    const r=await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/holders`,{
+      method:'POST',
+      headers:SB({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body:JSON.stringify(chunk)
+    });
+    if(!r.ok)throw new Error('upsert '+r.status+' '+(await r.text()));
+  }
+  const cutoff=new Date(Date.now()-2*60*1000).toISOString();
+  await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/holders?last_seen=lt.${cutoff}`,{
+    method:'DELETE',
+    headers:SB()
+  });
+}
+
+async function sync(){
+  if(!HELIUS)return;
+  const btn=$('sy');const prev=btn.textContent;btn.textContent='Syncing…';btn.disabled=true;
+  try{
+    const holders=await fetchHoldersFromHelius();
+    await pushToSupabase(holders);
+    rows=await load();
+    prep();
+    btn.textContent='Synced '+new Date().toLocaleTimeString();
+    setTimeout(()=>{btn.textContent=prev;btn.disabled=false},2500);
+  }catch(e){
+    console.error(e);btn.textContent='Sync failed';
+    setTimeout(()=>{btn.textContent=prev;btn.disabled=false},2500);
+  }
+}
+
+async function load(){
+  if(!LIVE)return [];
+  let out=[];
+  for(let o=0;o<50000;o+=1000){
+    const r=await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/holders?select=wallet,name,amount,first_seen,angle,jitter&order=first_seen.asc&limit=1000&offset=${o}`,{headers:SB()});
+    if(!r.ok)throw new Error('load '+r.status+' '+(await r.text()));
+    const d=await r.json();out.push(...d);if(d.length<1000)break;
+  }
+  return out;
+}
+
+function prep(){
+  const now=Date.now();
+
+  if(CONFIG.DEV_WALLET && !rows.some(r=>r.wallet===CONFIG.DEV_WALLET)){
+    rows.push({wallet:CONFIG.DEV_WALLET,name:'DEV',amount:0,
+      first_seen:new Date(Date.now()-180*864e5).toISOString(),
+      angle:0,jitter:0.5,_placeholder:true});
+  }
+
+  S=rows.map(r=>({
+    w:r.wallet,n:r.name,a:r.amount,
+    t0:new Date(r.first_seen).getTime(),
+    ang:r.angle,j:r.jitter,ph:r.jitter*977%6.28,
+    dev: r.wallet===CONFIG.DEV_WALLET,
+    ghost: !!r._ghost
+  }));
+
+  if(me && !S.find(s=>s.w===me)){
+    const seed=[...me].reduce((h,c)=>((h<<5)-h+c.charCodeAt(0))|0,0);
+    const rand=(n)=>{const x=Math.sin(seed+n)*10000;return x-Math.floor(x)};
+    S.push({w:me,n:null,a:0,t0:now,ang:rand(1)*6.2832,j:rand(2),ph:rand(3)*6.28,ghost:true});
+  }
+
+  S.sort((a,b)=>a.t0-b.t0);
+
+  const n=S.length,ma=S.reduce((m,s)=>Math.max(m,s.a),1);
+  S.forEach((s,i)=>{
+    s.rank=i+1;const t=n>1?i/(n-1):0;s.t=t;
+    s.r=46+Math.pow(t,.75)*(MAXR-46);
+    const ratio=s.a/ma;
+    s.sz=1.2+Math.pow(ratio,0.4)*11;
+    if(s.ghost||(s.dev&&s.a===0)) s.sz=Math.max(s.sz,2.2);
+    s.b=.4+.6*(1-t);
+    s.col=`hsl(${48+t*250} 100% ${62+(1-t)*20}%)`;
+    const arm=Math.floor(s.ang*3/6.2832)*6.2832/3;
+    s.base=arm+(s.ang-arm)*.4+s.r*.011;
+    s.off=(s.j-.5)*(.25+s.r/260)*40;
+    s.om=.05*(220/(s.r+90));
+  });
+
+  if(selected) selected = S.find(s=>s.w===selected.w) || null;
+  mine = me ? S.find(s=>s.w===me) : null;
+
+  const holders=S.filter(s=>!s.ghost && !s._placeholder).length;
+  const total=S.reduce((a,s)=>a+(s.ghost?0:s.a),0);
+  $('st').textContent = LIVE
+    ? (holders ? `${holders.toLocaleString()} holders · oldest ${dur(now-S[0].t0)} · ${cmp.format(total)} ${CONFIG.TICKER} tracked`
+               : 'No holders yet')
+    : 'Configure Supabase + Helius in CONFIG to load holders';
+
+  panel();
+  if(selected) renderSel(selected);
+}
+
+const ph=()=>window.phantom?.solana||window.solana;
+async function connect(silent){
+  const p=ph();
+  if(!p||!p.isPhantom){if(!silent)open('https://phantom.app/','_blank');return}
+  if(me){try{await p.disconnect()}catch(e){}me=null;$('cn').textContent='Connect Phantom';return upd()}
+  try{const r=await p.connect(silent?{onlyIfTrusted:true}:undefined);me=r.publicKey.toString()}catch(e){return}
+  upd();if(mine)find();
+}
+
+function upd(){prep();$('cn').textContent=me?short(me):'Connect Phantom';$('fd').hidden=!mine}
+function find(){focus=Math.max(2.2,cam.z)}
+
+function panel(){
+  const m=$('me');m.hidden=!me;if(!me)return;
+  if(!mine){$('m1').textContent='No star yet';
+    $('m2').innerHTML=`This wallet holds no ${CONFIG.TICKER}.`;
+    $('nb').hidden=true;return}
+  if(mine.ghost){
+    $('m1').textContent='Your star · #'+mine.rank;
+    $('m2').innerHTML=`No bag yet — <a href="${CONFIG.BUY_URL}" style="color:#fff">get some ${CONFIG.TICKER}</a> to grow your star and start your clock.`;
+    $('nb').hidden=true;return}
+  $('nb').hidden=false;
+  $('m1').textContent=(mine.n||'Your star')+' · #'+mine.rank;
+  $('m2').textContent=`Held ${dur(Date.now()-mine.t0)} · ${cmp.format(mine.a)} ${CONFIG.TICKER}`;
+}
+
+function renderSel(s){
+  const label = s.ghost ? 'Your wallet'
+              : s.dev && s.a===0 ? 'DEV'
+              : (s.n ? s.n : 'Holder');
+  $('sel-name').textContent = label + (s===mine ? ' · you' : '');
+  $('sel-wallet').textContent = s.w;
+  $('sel-held').textContent = s.ghost ? 'no bag yet' : dur(Date.now()-s.t0);
+  $('sel-rank').textContent = '#'+s.rank+' of '+S.length;
+  $('sel-amt').textContent = s.ghost
+    ? `0 ${CONFIG.TICKER}`
+    : `${cmp.format(s.a)} ${CONFIG.TICKER}`;
+}
+
+function select(s){
+  selected = s;
+  if(s){
+    renderSel(s);
+    $('sel').hidden = false;
+    $('lg').hidden = true;
+  } else {
+    $('sel').hidden = true;
+    $('lg').hidden = false;
+  }
+}
+
+$('sel-x').onclick = ()=>select(null);
+$('sel-scan').onclick = ()=>{
+  if(!selected) return;
+  window.open(CONFIG.EXPLORER + selected.w, '_blank', 'noopener,noreferrer');
+};
+addEventListener('keydown', e=>{ if(e.key==='Escape') select(null); });
+
+$('sv').onclick=async()=>{
+  const name=$('nm').value.trim().replace(/[\u0000-\u001f\u007f]/g,'').slice(0,20);
+  if(!name||!mine||!me||mine.ghost)return;
+  try{
+    const p=ph();
+    if(p&&p.signMessage){
+      const ts=Date.now();
+      try{ await p.signMessage(new TextEncoder().encode(`name:${name}:${ts}`),'utf8') }catch(e){ return }
+    }
+    const r=await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/holders?wallet=eq.${encodeURIComponent(me)}`,{
+      method:'PATCH',
+      headers:SB(),
+      body:JSON.stringify({name})
+    });
+    if(!r.ok)return;
+    mine.n=name;const row=rows.find(x=>x.wallet==me);if(row)row.name=name;panel();
+    if(selected&&selected.w===me) renderSel(selected);
+    $('nm').value='';
+  }catch(e){}
+};
+
+$('cn').onclick=()=>connect(0);
+$('fd').onclick=find;
+$('sy').onclick=sync;
+
+let drag=null, down=null;
+
+cv.onpointerdown=e=>{
+  drag={x:e.clientX,y:e.clientY};
+  down={x:e.clientX,y:e.clientY,t:Date.now()};
+  cv.classList.add('d');
+  focus=0;
+};
+cv.onpointermove=e=>{
+  mouse={x:e.clientX,y:e.clientY};
+  if(drag){
+    cam.x-=(e.clientX-drag.x)/cam.z;
+    cam.y-=(e.clientY-drag.y)/cam.z;
+    drag.x=e.clientX;drag.y=e.clientY;
+  }
+};
+cv.onpointerup=e=>{
+  if(down){
+    const dx=e.clientX-down.x, dy=e.clientY-down.y;
+    const moved=Math.hypot(dx,dy);
+    const dt=Date.now()-down.t;
+    if(moved<6 && dt<450){
+      if(hov) select(selected && selected.w===hov.w ? null : hov);
+      else select(null);
+    }
+  }
+  drag=null;down=null;cv.classList.remove('d');
+};
+cv.onpointerleave=()=>{drag=null;down=null;cv.classList.remove('d')};
+cv.onpointercancel=()=>{drag=null;down=null;cv.classList.remove('d')};
+
+function zoom(f,mx=W/2,my=H/2){
+  const wx=(mx-W/2)/cam.z+cam.x,wy=(my-H/2)/cam.z+cam.y;
+  cam.z=Math.min(6,Math.max(.25,cam.z*f));
+  cam.x=wx-(mx-W/2)/cam.z;cam.y=wy-(my-H/2)/cam.z;focus=0;
+}
+cv.onwheel=e=>{e.preventDefault();zoom(e.deltaY<0?1.12:.89,e.clientX,e.clientY)};
+$('zi').onclick=()=>zoom(1.3);$('zo').onclick=()=>zoom(.77);
+
+const pos=s=>{const a=s.base+s.om*T,c=Math.cos(a),n=Math.sin(a);
+  return{x:c*s.r-n*s.off,y:(n*s.r+c*s.off)*.62}};
+
+function frame(ts){
+  T=ts/1000;
+  if(focus&&mine){const p=pos(mine);cam.x+=(p.x-cam.x)*.07;cam.y+=(p.y-cam.y)*.07;cam.z+=(focus-cam.z)*.05}
+  g.globalCompositeOperation='source-over';g.globalAlpha=1;g.fillStyle='#03010a';g.fillRect(0,0,W,H);
+  const cx=W/2-cam.x*cam.z,cy=H/2-cam.y*cam.z,rr=Math.max(60,430*cam.z);
+  const cg=g.createRadialGradient(cx,cy,0,cx,cy,rr);
+  cg.addColorStop(0,'rgba(255,214,140,.55)');cg.addColorStop(.25,'rgba(255,60,160,.16)');
+  cg.addColorStop(.6,'rgba(70,60,255,.07)');cg.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=cg;g.fillRect(0,0,W,H);
+
+  g.globalCompositeOperation='lighter';
+  let best=null,bd=14;
+  for(const s of S){
+    const p=pos(s);
+    s.sx=W/2+(p.x-cam.x)*cam.z;s.sy=H/2+(p.y-cam.y)*cam.z;
+    if(s.sx<-40||s.sx>W+40||s.sy<-40||s.sy>H+40)continue;
+    const tw=.8+.2*Math.sin(T*2.2+s.ph*3),r=s.sz*(.55+.45*Math.min(cam.z,3))*tw;
+
+    if(s.ghost){
+      g.globalAlpha=0.55;g.fillStyle=s.col;
+      g.beginPath();g.arc(s.sx,s.sy,r,0,7);g.fill();
+    } else {
+      g.globalAlpha=s.b*.92;g.fillStyle=s.col;
+      g.beginPath();g.arc(s.sx,s.sy,r,0,7);g.fill();
+      if(s.sz>2.6||s.t<.1){g.globalAlpha=s.b*.14;g.beginPath();g.arc(s.sx,s.sy,r*4,0,7);g.fill()}
+    }
+
+    if(s.dev){
+      g.globalAlpha=0.9;g.strokeStyle='#ffd98a';g.lineWidth=1.6;
+      g.beginPath();g.arc(s.sx,s.sy,r+5,0,7);g.stroke();
+    }
+
+    const d=Math.hypot(s.sx-mouse.x,s.sy-mouse.y);
+    if(d<Math.max(bd,r+4)&&!drag){bd=d;best=s}
+  }
+
+  hov = best;
+  g.globalCompositeOperation='source-over';g.globalAlpha=1;
+  cv.classList.toggle('h', !!(hov||selected) && !drag);
+
+  const ringStars = new Set([mine, hov, selected].filter(Boolean));
+  for(const s of ringStars){
+    const mn=s==mine, isGhost=s.ghost, isSel=s==selected;
+    const k=mn?16+4*Math.sin(T*4):12;
+
+    if(isSel){
+      const pulse=1+0.08*Math.sin(T*4);
+      g.strokeStyle='rgba(155,199,255,.95)';
+      g.lineWidth=2;
+      g.beginPath();g.arc(s.sx,s.sy,(k+4)*pulse,0,7);g.stroke();
+    }
+
+    if(mn&&isGhost){
+      g.setLineDash([5,5]);g.strokeStyle='rgba(255,255,255,.75)';g.lineWidth=1.6;
+      g.beginPath();g.arc(s.sx,s.sy,k,0,7);g.stroke();g.setLineDash([]);
+    } else {
+      g.strokeStyle=mn?'#fff':(isSel?'rgba(200,220,255,.9)':'rgba(255,255,255,.75)');
+      g.lineWidth=mn?2:(isSel?1.6:1.2);
+      g.beginPath();g.arc(s.sx,s.sy,k,0,7);g.stroke();
+    }
+
+    if(mn){
+      g.fillStyle='#fff';g.font='700 12px Space Grotesk,sans-serif';
+      g.fillText(isGhost?'YOU (no bag)':(s.dev?'YOU · DEV':'YOU'), s.sx+22, s.sy+4);
+      const lg=g.createLinearGradient(s.sx,s.sy-300,s.sx,s.sy);
+      lg.addColorStop(0,'rgba(255,255,255,0)');lg.addColorStop(1,'rgba(255,255,255,.55)');
+      g.strokeStyle=lg;g.beginPath();g.moveTo(s.sx,s.sy-300);g.lineTo(s.sx,s.sy-k);g.stroke();
+    }
+  }
+
+  const tp=$('tip');
+  if(!selected && hov){
+    tp.style.display='block';
+    const label=hov.ghost?'You — no bag yet':hov.dev&&hov.a===0?'DEV':(hov.n?hov.n.replace(/</g,'&lt;'):'Holder');
+    const badge=hov.ghost?'':(hov==mine?' (you)':'');
+    const amt=hov.ghost?`<i>Get ${CONFIG.TICKER} to grow your star</i>`:`<i>${cmp.format(hov.a)} ${CONFIG.TICKER}</i>`;
+    tp.innerHTML=`<b>${label}</b>${badge}<br>${short(hov.w)}<br>Held <b>${dur(Date.now()-hov.t0)}</b> <i>· rank #${hov.rank} of ${S.length}</i><br>${amt}<span class="hint">Click to select</span>`;
+    tp.style.left=Math.min(W-tp.offsetWidth-10,mouse.x+16)+'px';
+    tp.style.top=Math.min(H-tp.offsetHeight-10,mouse.y+16)+'px';
+  } else {
+    tp.style.display='none';
+  }
+
+  requestAnimationFrame(frame);
+}
+
+(async()=>{
+  $('sy').hidden=!HELIUS;
+  try{
+    if(HELIUS){ try{ await sync() }catch(e){ console.warn('first sync failed',e) } }
+    rows=await load();
+  }catch(e){ rows=[] }
+  prep();requestAnimationFrame(frame);connect(1);
+  if(LIVE&&HELIUS)setInterval(()=>{sync().catch(()=>{})},CONFIG.REFRESH_MS);
+})();
+</script></body></html>
