@@ -23,7 +23,6 @@ canvas.h{cursor:pointer}
 .pill{padding:10px 18px;border:1px solid var(--line);border-radius:99px;background:rgba(10,6,22,.65);backdrop-filter:blur(10px);cursor:pointer;white-space:nowrap}
 .pill:hover{border-color:#fff9}
 #cn{background:linear-gradient(90deg,#ff2e93,#7a4bff);border:0;font-weight:600}
-#dm{font-size:11px;color:var(--dim)}
 #lg{left:22px;bottom:calc(20px + env(safe-area-inset-bottom,0px));color:var(--dim);font-size:13px;max-width:340px;line-height:1.5;pointer-events:none}
 #zm{right:22px;bottom:calc(20px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px}
 #zm button{width:42px;height:42px;padding:0;font-size:20px}
@@ -36,7 +35,6 @@ canvas.h{cursor:pointer}
 #tip{position:fixed;z-index:8;pointer-events:none;padding:10px 13px;border:1px solid var(--line);border-radius:12px;background:rgba(10,6,22,.9);font-size:13px;line-height:1.5;display:none;white-space:nowrap}
 #tip b{font-size:15px}#tip i{color:var(--dim);font-style:normal}
 #tip .hint{color:var(--acc);font-style:normal;margin-top:4px;display:block;font-size:11px;opacity:.8}
-
 #sel{left:22px;bottom:calc(20px + env(safe-area-inset-bottom,0px));
   width:min(340px,calc(100vw - 44px));padding:18px;position:fixed;z-index:6;
   border:1px solid rgba(155,199,255,.4);border-radius:16px;
@@ -98,13 +96,19 @@ const $=id=>document.getElementById(id),cv=$('c'),g=cv.getContext('2d'),R=(a,b)=
       LIVE=!!(CONFIG.SUPABASE_URL&&CONFIG.SUPABASE_ANON_KEY),
       HELIUS=!!(CONFIG.HELIUS_URL&&CONFIG.TOKEN_MINT);
 
-// --- Supabase headers — works for legacy eyJ... AND new sb_publishable_... keys
+// Supabase headers — works for legacy eyJ... AND new sb_publishable_... keys
 function SB(extra){
   const k=CONFIG.SUPABASE_ANON_KEY;
   const h={apikey:k,'Content-Type':'application/json'};
-  // Legacy JWT keys go in Authorization too; new publishable keys only need apikey
   if(k.startsWith('eyJ')) h['Authorization']='Bearer '+k;
   return extra ? Object.assign(h,extra) : h;
+}
+
+// Fetch with 12s timeout — stops the "Syncing…" hang
+function fetchT(url,opts={},ms=12000){
+  const ctrl=new AbortController();
+  const t=setTimeout(()=>ctrl.abort(),ms);
+  return fetch(url,{...opts,signal:ctrl.signal}).finally(()=>clearTimeout(t));
 }
 
 let W,H,T=0,S=[],rows=[],me=null,mine=null,hov=null,selected=null,focus=0,
@@ -116,28 +120,56 @@ addEventListener('resize',rs);rs();cam.z=Math.min(W,H)/980;
 const short=w=>w.slice(0,4)+'…'+w.slice(-4),cmp=new Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:2});
 const dur=ms=>{const d=ms/864e5|0,h=ms/36e5%24|0;return d?d+'d '+h+'h':h?h+'h '+(ms/6e4%60|0)+'m':(ms/6e4|0)+'m'};
 
+// ── Helius: top 20 holders via getTokenLargestAccounts (standard RPC, browser-safe)
 async function fetchHoldersFromHelius(){
-  const map=new Map();let page=1;const limit=1000;
-  while(true){
-    const r=await fetch(CONFIG.HELIUS_URL,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({jsonrpc:'2.0',id:'nebula',method:'getTokenAccounts',
-        params:{mint:CONFIG.TOKEN_MINT,page,limit,options:{showZeroBalance:false}}})
-    });
-    if(!r.ok)throw new Error('helius '+r.status);
-    const j=await r.json();
-    const accounts=j?.result?.token_accounts??[];
-    if(!accounts.length)break;
-    for(const a of accounts){
-      const owner=a.owner;if(!owner)continue;
-      if(EXCLUDE_SET.has(owner.toLowerCase()))continue;
-      const amt=Number(a.amount)/Math.pow(10,a.decimals??0);
-      map.set(owner,(map.get(owner)??0)+amt);
-    }
-    if(accounts.length<limit)break;
-    page++;
-  }
-  return [...map.entries()].map(([wallet,amount])=>({wallet,amount}));
+  const r=await fetchT(CONFIG.HELIUS_URL,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      jsonrpc:'2.0',id:'nebula',
+      method:'getTokenLargestAccounts',
+      params:[CONFIG.TOKEN_MINT]
+    })
+  },12000);
+
+  if(!r.ok)throw new Error('helius '+r.status+' '+(await r.text()));
+  const j=await r.json();
+  if(j.error)throw new Error('helius rpc: '+JSON.stringify(j.error));
+
+  const accounts=j?.result?.value??[];
+  console.log('helius returned',accounts.length,'largest accounts');
+
+  return accounts
+    .filter(a=>a.uiAmount>0)
+    .map(a=>({
+      wallet:a.address,           // token account address
+      amount:a.uiAmount,
+      _isTokenAccount:true
+    }));
+}
+
+// ── Resolve token-account → owner wallet (getTokenAccountsByOwner isn't available
+//    without owner, so use getAccountInfo to read the base58 owner from the account)
+async function resolveOwners(holders){
+  // Batch into one getMultipleAccounts call
+  const addrs=holders.map(h=>h.wallet);
+  const r=await fetchT(CONFIG.HELIUS_URL,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      jsonrpc:'2.0',id:'owners',
+      method:'getMultipleAccounts',
+      params:[addrs,{encoding:'jsonParsed'}]
+    })
+  },12000);
+  if(!r.ok)throw new Error('owners '+r.status);
+  const j=await r.json();
+  const values=j?.result?.value??[];
+  return holders.map((h,i)=>{
+    const info=values[i]?.data?.parsed?.info;
+    const owner=info?.owner;
+    return {...h, wallet: owner || h.wallet};
+  }).filter(h=>h.wallet);
 }
 
 async function pushToSupabase(holders){
@@ -164,15 +196,19 @@ async function sync(){
   if(!HELIUS)return;
   const btn=$('sy');const prev=btn.textContent;btn.textContent='Syncing…';btn.disabled=true;
   try{
-    const holders=await fetchHoldersFromHelius();
+    let holders=await fetchHoldersFromHelius();
+    holders=await resolveOwners(holders);
+    holders=holders.filter(h=>!EXCLUDE_SET.has(h.wallet.toLowerCase()));
+    console.log('syncing',holders.length,'holders to supabase');
     await pushToSupabase(holders);
     rows=await load();
     prep();
     btn.textContent='Synced '+new Date().toLocaleTimeString();
     setTimeout(()=>{btn.textContent=prev;btn.disabled=false},2500);
   }catch(e){
-    console.error(e);btn.textContent='Sync failed';
-    setTimeout(()=>{btn.textContent=prev;btn.disabled=false},2500);
+    console.error('sync failed:',e);
+    btn.textContent='Sync failed — see console';
+    setTimeout(()=>{btn.textContent=prev;btn.disabled=false},4000);
   }
 }
 
@@ -189,13 +225,11 @@ async function load(){
 
 function prep(){
   const now=Date.now();
-
   if(CONFIG.DEV_WALLET && !rows.some(r=>r.wallet===CONFIG.DEV_WALLET)){
     rows.push({wallet:CONFIG.DEV_WALLET,name:'DEV',amount:0,
       first_seen:new Date(Date.now()-180*864e5).toISOString(),
       angle:0,jitter:0.5,_placeholder:true});
   }
-
   S=rows.map(r=>({
     w:r.wallet,n:r.name,a:r.amount,
     t0:new Date(r.first_seen).getTime(),
@@ -203,15 +237,12 @@ function prep(){
     dev: r.wallet===CONFIG.DEV_WALLET,
     ghost: !!r._ghost
   }));
-
   if(me && !S.find(s=>s.w===me)){
     const seed=[...me].reduce((h,c)=>((h<<5)-h+c.charCodeAt(0))|0,0);
     const rand=(n)=>{const x=Math.sin(seed+n)*10000;return x-Math.floor(x)};
     S.push({w:me,n:null,a:0,t0:now,ang:rand(1)*6.2832,j:rand(2),ph:rand(3)*6.28,ghost:true});
   }
-
   S.sort((a,b)=>a.t0-b.t0);
-
   const n=S.length,ma=S.reduce((m,s)=>Math.max(m,s.a),1);
   S.forEach((s,i)=>{
     s.rank=i+1;const t=n>1?i/(n-1):0;s.t=t;
@@ -226,17 +257,14 @@ function prep(){
     s.off=(s.j-.5)*(.25+s.r/260)*40;
     s.om=.05*(220/(s.r+90));
   });
-
   if(selected) selected = S.find(s=>s.w===selected.w) || null;
   mine = me ? S.find(s=>s.w===me) : null;
-
   const holders=S.filter(s=>!s.ghost && !s._placeholder).length;
   const total=S.reduce((a,s)=>a+(s.ghost?0:s.a),0);
   $('st').textContent = LIVE
     ? (holders ? `${holders.toLocaleString()} holders · oldest ${dur(now-S[0].t0)} · ${cmp.format(total)} ${CONFIG.TICKER} tracked`
-               : 'No holders yet')
+               : 'No holders yet — click Sync now')
     : 'Configure Supabase + Helius in CONFIG to load holders';
-
   panel();
   if(selected) renderSel(selected);
 }
@@ -249,10 +277,8 @@ async function connect(silent){
   try{const r=await p.connect(silent?{onlyIfTrusted:true}:undefined);me=r.publicKey.toString()}catch(e){return}
   upd();if(mine)find();
 }
-
 function upd(){prep();$('cn').textContent=me?short(me):'Connect Phantom';$('fd').hidden=!mine}
 function find(){focus=Math.max(2.2,cam.z)}
-
 function panel(){
   const m=$('me');m.hidden=!me;if(!me)return;
   if(!mine){$('m1').textContent='No star yet';
@@ -266,7 +292,6 @@ function panel(){
   $('m1').textContent=(mine.n||'Your star')+' · #'+mine.rank;
   $('m2').textContent=`Held ${dur(Date.now()-mine.t0)} · ${cmp.format(mine.a)} ${CONFIG.TICKER}`;
 }
-
 function renderSel(s){
   const label = s.ghost ? 'Your wallet'
               : s.dev && s.a===0 ? 'DEV'
@@ -279,19 +304,11 @@ function renderSel(s){
     ? `0 ${CONFIG.TICKER}`
     : `${cmp.format(s.a)} ${CONFIG.TICKER}`;
 }
-
 function select(s){
   selected = s;
-  if(s){
-    renderSel(s);
-    $('sel').hidden = false;
-    $('lg').hidden = true;
-  } else {
-    $('sel').hidden = true;
-    $('lg').hidden = false;
-  }
+  if(s){ renderSel(s); $('sel').hidden = false; $('lg').hidden = true; }
+  else { $('sel').hidden = true; $('lg').hidden = false; }
 }
-
 $('sel-x').onclick = ()=>select(null);
 $('sel-scan').onclick = ()=>{
   if(!selected) return;
@@ -309,43 +326,27 @@ $('sv').onclick=async()=>{
       try{ await p.signMessage(new TextEncoder().encode(`name:${name}:${ts}`),'utf8') }catch(e){ return }
     }
     const r=await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/holders?wallet=eq.${encodeURIComponent(me)}`,{
-      method:'PATCH',
-      headers:SB(),
-      body:JSON.stringify({name})
+      method:'PATCH', headers:SB(), body:JSON.stringify({name})
     });
-    if(!r.ok)return;
+    if(!r.ok){ console.error('save name failed',r.status,await r.text()); return; }
     mine.n=name;const row=rows.find(x=>x.wallet==me);if(row)row.name=name;panel();
     if(selected&&selected.w===me) renderSel(selected);
     $('nm').value='';
-  }catch(e){}
+  }catch(e){console.error(e)}
 };
-
 $('cn').onclick=()=>connect(0);
 $('fd').onclick=find;
 $('sy').onclick=sync;
 
 let drag=null, down=null;
-
-cv.onpointerdown=e=>{
-  drag={x:e.clientX,y:e.clientY};
-  down={x:e.clientX,y:e.clientY,t:Date.now()};
-  cv.classList.add('d');
-  focus=0;
-};
-cv.onpointermove=e=>{
-  mouse={x:e.clientX,y:e.clientY};
-  if(drag){
-    cam.x-=(e.clientX-drag.x)/cam.z;
-    cam.y-=(e.clientY-drag.y)/cam.z;
-    drag.x=e.clientX;drag.y=e.clientY;
-  }
-};
+cv.onpointerdown=e=>{drag={x:e.clientX,y:e.clientY};down={x:e.clientX,y:e.clientY,t:Date.now()};cv.classList.add('d');focus=0;};
+cv.onpointermove=e=>{mouse={x:e.clientX,y:e.clientY};
+  if(drag){cam.x-=(e.clientX-drag.x)/cam.z;cam.y-=(e.clientY-drag.y)/cam.z;drag.x=e.clientX;drag.y=e.clientY;}};
 cv.onpointerup=e=>{
   if(down){
     const dx=e.clientX-down.x, dy=e.clientY-down.y;
     const moved=Math.hypot(dx,dy);
-    const dt=Date.now()-down.t;
-    if(moved<6 && dt<450){
+    if(moved<6 && Date.now()-down.t<450){
       if(hov) select(selected && selected.w===hov.w ? null : hov);
       else select(null);
     }
@@ -392,16 +393,13 @@ function frame(ts){
       g.beginPath();g.arc(s.sx,s.sy,r,0,7);g.fill();
       if(s.sz>2.6||s.t<.1){g.globalAlpha=s.b*.14;g.beginPath();g.arc(s.sx,s.sy,r*4,0,7);g.fill()}
     }
-
     if(s.dev){
       g.globalAlpha=0.9;g.strokeStyle='#ffd98a';g.lineWidth=1.6;
       g.beginPath();g.arc(s.sx,s.sy,r+5,0,7);g.stroke();
     }
-
     const d=Math.hypot(s.sx-mouse.x,s.sy-mouse.y);
     if(d<Math.max(bd,r+4)&&!drag){bd=d;best=s}
   }
-
   hov = best;
   g.globalCompositeOperation='source-over';g.globalAlpha=1;
   cv.classList.toggle('h', !!(hov||selected) && !drag);
@@ -410,14 +408,11 @@ function frame(ts){
   for(const s of ringStars){
     const mn=s==mine, isGhost=s.ghost, isSel=s==selected;
     const k=mn?16+4*Math.sin(T*4):12;
-
     if(isSel){
       const pulse=1+0.08*Math.sin(T*4);
-      g.strokeStyle='rgba(155,199,255,.95)';
-      g.lineWidth=2;
+      g.strokeStyle='rgba(155,199,255,.95)';g.lineWidth=2;
       g.beginPath();g.arc(s.sx,s.sy,(k+4)*pulse,0,7);g.stroke();
     }
-
     if(mn&&isGhost){
       g.setLineDash([5,5]);g.strokeStyle='rgba(255,255,255,.75)';g.lineWidth=1.6;
       g.beginPath();g.arc(s.sx,s.sy,k,0,7);g.stroke();g.setLineDash([]);
@@ -426,7 +421,6 @@ function frame(ts){
       g.lineWidth=mn?2:(isSel?1.6:1.2);
       g.beginPath();g.arc(s.sx,s.sy,k,0,7);g.stroke();
     }
-
     if(mn){
       g.fillStyle='#fff';g.font='700 12px Space Grotesk,sans-serif';
       g.fillText(isGhost?'YOU (no bag)':(s.dev?'YOU · DEV':'YOU'), s.sx+22, s.sy+4);
@@ -448,7 +442,6 @@ function frame(ts){
   } else {
     tp.style.display='none';
   }
-
   requestAnimationFrame(frame);
 }
 
@@ -457,7 +450,7 @@ function frame(ts){
   try{
     if(HELIUS){ try{ await sync() }catch(e){ console.warn('first sync failed',e) } }
     rows=await load();
-  }catch(e){ rows=[] }
+  }catch(e){ console.error('load failed',e); rows=[] }
   prep();requestAnimationFrame(frame);connect(1);
   if(LIVE&&HELIUS)setInterval(()=>{sync().catch(()=>{})},CONFIG.REFRESH_MS);
 })();
